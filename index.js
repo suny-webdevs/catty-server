@@ -1,8 +1,7 @@
+require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb")
-
-require("dotenv").config()
 
 const app = express()
 const port = process.env.PORT || 5000
@@ -20,10 +19,10 @@ const corsOptions = {
 
 app.use(cors(corsOptions))
 app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+app.use(express.urlencoded())
 
 app.get("/", (req, res) => {
-  res.send("Welcome to Catty server")
+  res.json({ success: true, message: "Welcome to Catty server" })
 })
 
 const client = new MongoClient(process.env.DATABASE_URL, {
@@ -112,7 +111,7 @@ async function run() {
       try {
         const newProduct = req.body
         const data = await productCollection.insertOne(newProduct)
-        return res.status(200).json({ data })
+        return res.status(200).json({ message: "Product saved", data })
       } catch (error) {
         return res
           .status(400)
@@ -136,12 +135,49 @@ async function run() {
     app.get("/products/:id", async (req, res) => {
       try {
         const id = req.params.id
-        const product = await productCollection.findOne({ _id: id })
+        const product = await productCollection.findOne({
+          _id: new ObjectId(id),
+        })
         return res.status(200).json({ product })
       } catch (error) {
         return res
           .status(400)
           .json({ message: "Failed to get product!", error })
+      }
+    })
+
+    //* Update a product
+    app.put("/update-product/:id", async (req, res) => {
+      try {
+        const product = req.body
+        const id = req.params.id
+        const data = await productCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: { ...product },
+          },
+          { upsert: true }
+        )
+        res.json({ message: "Product update successfully", data })
+      } catch (error) {
+        return res
+          .status(400)
+          .json({ message: "Failed to update product!", error })
+      }
+    })
+
+    //* Delete a product
+    app.delete("/delete-product/:id", async (req, res) => {
+      try {
+        const id = req.params.id
+        const data = await productCollection.deleteOne({
+          _id: new ObjectId(id),
+        })
+        res.json({ message: "Product deleted successfully", data })
+      } catch (error) {
+        return res
+          .status(400)
+          .json({ message: "Failed to delete product!", error })
       }
     })
 
@@ -187,6 +223,28 @@ async function run() {
         return res
           .status(400)
           .json({ message: "Failed to delete request!", error })
+      }
+    })
+
+    //* Create wishlist
+    app.post("/create-wishlist", async (req, res) => {
+      try {
+        const wishList = req.body
+        const data = await wishListCollection.insertOne(wishList)
+        res.json({ message: "Add to wishlist", data })
+      } catch (error) {
+        return res.status(400).json({ message: "Failed to add!", error })
+      }
+    })
+
+    //* Create Cart
+    app.post("/create-cart", async (req, res) => {
+      try {
+        const cart = req.body
+        const data = await cartCollection.insertOne(cart)
+        res.json({ message: "Add to cart", data })
+      } catch (error) {
+        return res.status(400).json({ message: "Failed to add!", error })
       }
     })
 
