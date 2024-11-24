@@ -2,6 +2,8 @@ require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb")
+const jwt = require("jsonwebtoken")
+var cookieParser = require("cookie-parser")
 
 const app = express()
 const port = process.env.PORT || 5000
@@ -20,10 +22,27 @@ const corsOptions = {
 app.use(cors(corsOptions))
 app.use(express.json())
 app.use(express.urlencoded())
+app.use(cookieParser())
 
 app.get("/", (req, res) => {
   res.json({ success: true, message: "Welcome to Catty server" })
 })
+
+// Verify token middleware
+const verifyToken = async (req, res, next) => {
+  const token = req.cookies?.token
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access!" })
+  }
+  jwt.verify(token, process.env.ACCESS_SECRET_TOKEN, (err, decoded) => {
+    if (err) {
+      console.log(err)
+      res.status(401).send({ message: "Unauthorized access!" })
+    }
+    req.user = decoded
+    next()
+  })
+}
 
 const client = new MongoClient(process.env.DATABASE_URL, {
   serverApi: {
@@ -40,6 +59,66 @@ async function run() {
     const requestCollection = client.db("cattyDB").collection("requests")
     const wishListCollection = client.db("cattyDB").collection("wishLists")
     const cartCollection = client.db("cattyDB").collection("carts")
+
+    // * Middlewares *
+    // verify admin middleware
+    const verifyAdmin = async (req, res, next) => {
+      const query = { email: req.user?.email }
+      const result = await userCollection.findOne(query)
+      if (!result || result?.role !== "admin") {
+        return res.status(401).send({ message: "Unauthorized access!" })
+      }
+      next()
+    }
+
+    // verify seller
+    const verifySeller = async (req, res, next) => {
+      const query = { email: req.user?.email }
+      const result = await userCollection.findOne(query)
+      if (!result || result?.role !== "seller") {
+        return res.status(401).send({ message: "Unauthorized access!" })
+      }
+      next()
+    }
+
+    // verify buyer
+    const verifyBuyer = async (req, res, next) => {
+      const query = { email: req.user?.email }
+      const result = await userCollection.findOne(query)
+      if (!result || result?.role !== "buyer") {
+        return res.status(401).send({ message: "Unauthorized access!" })
+      }
+      next()
+    }
+
+    // jwt api
+    app.post("/jwt", async (req, res) => {
+      const user = req.body
+      const token = jwt.sign(user, process.env.ACCESS_SECRET_TOKEN, {
+        expiresIn: "12h",
+      })
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+        })
+        .send({ success: true })
+    })
+    // logout api
+    app.get("/logout", async (req, res) => {
+      try {
+        res
+          .clearCookie("token", {
+            maxAge: 0,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+          })
+          .send({ success: true })
+      } catch (err) {
+        res.status(500).send(err)
+      }
+    })
 
     //* Create user
     app.post("/create-user", async (req, res) => {
